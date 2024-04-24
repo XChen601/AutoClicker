@@ -6,7 +6,9 @@ from tkinter import ttk
 from pynput import mouse
 import keyboard
 import threading
+import random
 
+# TODO: Set stop condition, upload image and when it appears stop
 class AutoClicker:
     def __init__(self, update_callback=None):
         self.locations = []
@@ -14,6 +16,12 @@ class AutoClicker:
         self.running = False
         self.cycles_remaining = 0
         self.update_callback = update_callback
+        self.move_back = False
+        self.random_offset = .1
+
+    def set_config(self, move_back=False, random_offset=0.0):
+        self.move_back = move_back
+        self.random_offset = random_offset
 
     def add_location(self, x, y):
         self.locations.append((x, y))
@@ -33,10 +41,17 @@ class AutoClicker:
                 if self.update_callback:
                     self.update_callback(self.cycles_remaining)
                 for loc in self.locations:
-                    pyautogui.click(x=loc[0], y=loc[1])
+                    if self.move_back:
+                        curr_x, curr_y = pyautogui.position()
+                        pyautogui.click(x=loc[0], y=loc[1])
+                        pyautogui.moveTo(curr_x, curr_y)
+                    else:
+                        pyautogui.click(x=loc[0], y=loc[1])
                     sleep_time = 0
-                    while sleep_time < interval and self.running:
-                        time.sleep(min(0.1, interval - sleep_time))
+                    offset = random.uniform(-self.random_offset, self.random_offset)
+                    print(offset)
+                    while sleep_time < (interval + offset) and self.running:
+                        time.sleep(.1)
                         sleep_time += 0.1
         except KeyboardInterrupt:
             print("Program exited.")
@@ -65,6 +80,8 @@ class AutoClickerGUI:
         self.y_var = tk.StringVar(value="0")
         self.click_interval_var = tk.StringVar(value="5")
         self.cycles_var = tk.StringVar(value="10")
+        self.offset_var = tk.StringVar(value=".1")
+        self.keep_mouse_var = tk.BooleanVar(value=False)
         self.locations_frame = tk.Frame(root)
         self.setup_ui()
         self.bind_stop_key()
@@ -105,23 +122,33 @@ class AutoClickerGUI:
         interval_entry = ttk.Entry(frame, textvariable=self.click_interval_var, width=entry_width)
         interval_entry.grid(row=2, column=1)
 
+        # Offset
+        offset_label = tk.Label(frame, text="Random offset")
+        offset_label.grid(row=3, column=0)
+        offset_entry = ttk.Entry(frame, textvariable=self.offset_var, width=entry_width)
+        offset_entry.grid(row=3, column=1)
+
+        # Keep mouse
+        keep_mouse_cb = ttk.Checkbutton(frame, text="Keep Mouse", variable=self.keep_mouse_var)
+        keep_mouse_cb.grid(row=3, column=2, columnspan=2)
+
         # Set cycles entry
         cycles_label = tk.Label(frame, text="Cycles:")
-        cycles_label.grid(row=3, column=0)
+        cycles_label.grid(row=4, column=0)
         cycles_entry = ttk.Entry(frame, textvariable=self.cycles_var, width=entry_width)
-        cycles_entry.grid(row=3, column=1)
+        cycles_entry.grid(row=4, column=1)
 
         self.cycles_remaining_label = tk.Label(frame, text=f"Remaining: 0")
-        self.cycles_remaining_label.grid(row=3, column=2)
+        self.cycles_remaining_label.grid(row=4, column=2, columnspan=2)
 
         # Execute button
         self.execute_btn = tk.Button(frame, text="Execute", command=self.execute)
-        self.execute_btn.grid(row=4, columnspan=2)
+        self.execute_btn.grid(row=5, columnspan=2)
 
         # Stop button
         self.stop_btn = tk.Button(frame, text=f"Stop ({self.stop_key})", command=self.stop)
         self.stop_btn.config(state=tk.DISABLED)
-        self.stop_btn.grid(row=4, column=2, columnspan=2)
+        self.stop_btn.grid(row=5, column=2, columnspan=2)
 
         # Location display panel
         self.locations_frame.pack()
@@ -132,6 +159,7 @@ class AutoClickerGUI:
         if remaining == 0:
             self.stop_btn.config(state=tk.DISABLED)
             self.execute_btn.config(state=tk.NORMAL)
+
     def bind_stop_key(self):
         # Binding the stop function to the stop key
         keyboard.add_hotkey(self.stop_key, self.stop)
@@ -161,7 +189,6 @@ class AutoClickerGUI:
     def pick_location(self):
         self.start_mouse_listener()
 
-
     def add_location(self):
         x = int(self.x_var.get())
         y = int(self.y_var.get())
@@ -190,6 +217,7 @@ class AutoClickerGUI:
         print('running...')
         interval = float(self.click_interval_var.get())
         cycles = int(self.cycles_var.get())
+        self.autoclicker.set_config(self.keep_mouse_var.get(), float(self.offset_var.get()))
         self.autoclicker.execute(cycles, interval)
         self.execute_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.NORMAL)
@@ -197,7 +225,7 @@ class AutoClickerGUI:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.geometry("400x300")
+    root.geometry("400x350")
     app = AutoClickerGUI(root)
     root.attributes('-topmost', True)
 
