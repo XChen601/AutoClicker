@@ -8,10 +8,12 @@ import keyboard
 import threading
 
 class AutoClicker:
-    def __init__(self):
+    def __init__(self, update_callback=None):
         self.locations = []
         self.thread = None
         self.running = False
+        self.cycles_remaining = 0
+        self.update_callback = update_callback
 
     def add_location(self, x, y):
         self.locations.append((x, y))
@@ -21,11 +23,15 @@ class AutoClicker:
         if 0 <= index < len(self.locations):
             del self.locations[index]
 
-    def execute_thread(self, count, interval):
+    def execute_thread(self, cycles, interval):
+        self.cycles_remaining = cycles
         try:
-            for i in range(count):
+            for i in range(cycles):
                 if not self.running:
                     break
+                self.cycles_remaining -= 1
+                if self.update_callback:
+                    self.update_callback(self.cycles_remaining)
                 for loc in self.locations:
                     pyautogui.click(x=loc[0], y=loc[1])
                     sleep_time = 0
@@ -37,27 +43,28 @@ class AutoClicker:
         finally:
             self.running = False
 
-    def execute(self, count, interval):
+    def execute(self, cycles, interval):
         if not self.thread or not self.thread.is_alive():
             self.running = True
-            self.thread = threading.Thread(target=self.execute_thread, args=(count, interval))
+            self.thread = threading.Thread(target=self.execute_thread, args=(cycles, interval))
             self.thread.start()
 
     def stop(self):
         self.running = False
-        if self.thread:
-            self.thread.join()
-
+        print('1')
+        # if self.thread:
+        #     self.thread.join()
+        print('2')
 class AutoClickerGUI:
     def __init__(self, root):
         self.root = root
-        self.autoclicker = AutoClicker()
+        self.autoclicker = AutoClicker(update_callback=self.update_remaining_cycles)
         self.stop_key = "F6"
 
         self.x_var = tk.StringVar(value="0")
         self.y_var = tk.StringVar(value="0")
         self.click_interval_var = tk.StringVar(value="5")
-        self.count_var = tk.StringVar(value="10")
+        self.cycles_var = tk.StringVar(value="10")
         self.locations_frame = tk.Frame(root)
         self.setup_ui()
         self.bind_stop_key()
@@ -93,16 +100,19 @@ class AutoClickerGUI:
         add_location_btn.grid(row=1, column=2, columnspan=2)
 
         # Set click interval entry
-        interval_label = tk.Label(frame, text="Click Interval (s):")
+        interval_label = tk.Label(frame, text="Interval (sec):")
         interval_label.grid(row=2, column=0)
         interval_entry = ttk.Entry(frame, textvariable=self.click_interval_var, width=entry_width)
         interval_entry.grid(row=2, column=1)
 
-        # Set count entry
-        count_label = tk.Label(frame, text="Counts:")
-        count_label.grid(row=3, column=0)
-        count_entry = ttk.Entry(frame, textvariable=self.count_var, width=entry_width)
-        count_entry.grid(row=3, column=1)
+        # Set cycles entry
+        cycles_label = tk.Label(frame, text="Cycles:")
+        cycles_label.grid(row=3, column=0)
+        cycles_entry = ttk.Entry(frame, textvariable=self.cycles_var, width=entry_width)
+        cycles_entry.grid(row=3, column=1)
+
+        self.cycles_remaining_label = tk.Label(frame, text=f"Remaining: 0")
+        self.cycles_remaining_label.grid(row=3, column=2)
 
         # Execute button
         self.execute_btn = tk.Button(frame, text="Execute", command=self.execute)
@@ -116,6 +126,12 @@ class AutoClickerGUI:
         # Location display panel
         self.locations_frame.pack()
 
+    def update_remaining_cycles(self, remaining):
+        print('updating cycle')
+        self.cycles_remaining_label.config(text=f"Remaining: {remaining}")
+        if remaining == 0:
+            self.stop_btn.config(state=tk.DISABLED)
+            self.execute_btn.config(state=tk.NORMAL)
     def bind_stop_key(self):
         # Binding the stop function to the stop key
         keyboard.add_hotkey(self.stop_key, self.stop)
@@ -125,6 +141,7 @@ class AutoClickerGUI:
         self.autoclicker.stop()
         self.execute_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.DISABLED)
+        self.update_remaining_cycles(0)
 
     def start_mouse_listener(self):
         listener = mouse.Listener(on_click=self.on_click)
@@ -172,8 +189,8 @@ class AutoClickerGUI:
     def execute(self):
         print('running...')
         interval = float(self.click_interval_var.get())
-        count = int(self.count_var.get())
-        self.autoclicker.execute(count, interval)
+        cycles = int(self.cycles_var.get())
+        self.autoclicker.execute(cycles, interval)
         self.execute_btn.config(state=tk.DISABLED)
         self.stop_btn.config(state=tk.NORMAL)
 
